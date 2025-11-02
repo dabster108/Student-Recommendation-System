@@ -75,9 +75,9 @@ else:
     groq_client = Groq(api_key=GROQ_API_KEY)
 
 
-# ============================================
+
 # Pydantic Models
-# ============================================
+
 
 class StudentOnboard(BaseModel):
     """Model for student onboarding data"""
@@ -105,9 +105,7 @@ class RecommendationResponse(BaseModel):
     recommendations: List[Dict[str, Any]]
 
 
-# ============================================
-# Helper Functions
-# ============================================
+
 
 def load_all_students() -> List[Dict[str, Any]]:
     """Load all student profiles from student.json.
@@ -365,9 +363,6 @@ def recommend_from_category(
     return get_top_matches(query, dataset, key=key, top_n=top_n)
 
 
-# ============================================
-# API Endpoints
-# ============================================
 
 @app.get("/")
 async def home():
