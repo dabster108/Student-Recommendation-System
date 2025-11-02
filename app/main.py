@@ -6,11 +6,12 @@ personalized content recommendations using TF-IDF + Cosine Similarity with
 Groq API for keyword extraction.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 import json
@@ -28,6 +29,19 @@ from groq import Groq
 # Import recommendation engine
 from app.routes import recommendation as rec_engine
 
+# Import data models
+from app.models import (
+    StudentOnboard,
+    RecommendationQuery,
+    RecommendationResponse,
+    OnboardingResponse,
+    StudentProfile,
+    HealthCheckResponse,
+    ErrorResponse,
+    ValidationErrorResponse,
+    ValidationError as ValidationErrorModel
+)
+
 # Load environment variables from specific path
 ENV_PATH = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -35,8 +49,10 @@ load_dotenv(dotenv_path=ENV_PATH)
 # Initialize FastAPI app
 app = FastAPI(
     title="Student Recommendation API",
-    description="AI-powered recommendation system for students",
-    version="1.0.0"
+    description="AI-powered recommendation system for students with comprehensive data validation",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 # Add CORS middleware to allow frontend access
@@ -47,6 +63,64 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ============================================
+# Exception Handlers for Validation
+# ============================================
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """
+    Custom handler for Pydantic validation errors.
+    Returns detailed, user-friendly error messages.
+    """
+    errors = []
+    for error in exc.errors():
+        field_path = " -> ".join(str(loc) for loc in error["loc"])
+        errors.append(
+            ValidationErrorModel(
+                field=field_path,
+                message=error["msg"],
+                type=error["type"]
+            ).dict()
+        )
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": "Validation error occurred. Please check your input data.",
+            "errors": errors
+        }
+    )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    """
+    Custom handler for ValueError exceptions.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": str(exc),
+            "error_code": "VALUE_ERROR"
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    General exception handler for unexpected errors.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "An unexpected error occurred. Please try again later.",
+            "error_code": "INTERNAL_SERVER_ERROR"
+        }
+    )
 
 # File paths
 BASE_DIR = Path(__file__).parent
@@ -59,14 +133,38 @@ STUDENT_DATA_PATH = DATA_DIR / "student.json"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# Load dummy data
-try:
-    with open(DUMMY_DATA_PATH, "r", encoding="utf-8") as f:
-        DUMMY_DATA = json.load(f)
-except FileNotFoundError:
-    raise RuntimeError(f"Dummy data file not found at {DUMMY_DATA_PATH}")
+# Load dummy data with validation
+def load_dummy_data() -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Load and validate dummy data from JSON file.
+    """
+    try:
+        with open(DUMMY_DATA_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # Validate data structure
+        if not isinstance(data, dict):
+            raise ValueError("Dummy data must be a dictionary")
+        
+        # Validate each category is a list
+        for category, items in data.items():
+            if not isinstance(items, list):
+                raise ValueError(f"Category '{category}' must be a list")
+        
+        print(f"✓ Dummy data loaded successfully with {len(data)} categories")
+        return data
+    
+    except FileNotFoundError:
+        raise RuntimeError(f"Dummy data file not found at {DUMMY_DATA_PATH}")
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Invalid JSON in dummy data file: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error loading dummy data: {e}")
 
-# Initialize Groq client
+
+DUMMY_DATA = load_dummy_data()
+
+# Initialize Groq client with validation
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
     print("Warning: GROQ_API_KEY not found in environment variables")
@@ -75,37 +173,9 @@ else:
     groq_client = Groq(api_key=GROQ_API_KEY)
 
 
-
-# Pydantic Models
-
-
-class StudentOnboard(BaseModel):
-    """Model for student onboarding data"""
-    name: str
-    username: str
-    address: str
-    faculty: str
-    grade: str
-    interests: List[str]
-    courses_enrolled: List[str]
-
-
-class RecommendationQuery(BaseModel):
-    """Model for recommendation query"""
-    query: str
-    # Optional student id to request recommendations from a specific student profile
-    student_id: Optional[int] = None
-
-
-class RecommendationResponse(BaseModel):
-    """Model for recommendation response"""
-    student: Optional[Dict[str, Any]] = None
-    query: str
-    extracted_keywords: List[str]
-    recommendations: List[Dict[str, Any]]
-
-
-
+# ============================================
+# Helper Functions with Type Hints
+# ============================================
 
 def load_all_students() -> List[Dict[str, Any]]:
     """Load all student profiles from student.json.
@@ -258,7 +328,15 @@ Return only comma-separated keywords for what the user WANTS."""
 
 
 def fallback_keyword_extraction(query: str) -> List[str]:
-    """Simple fallback keyword extraction using basic NLP techniques"""
+    """
+    Simple fallback keyword extraction using basic NLP techniques.
+    
+    Args:
+        query: User search query
+    
+    Returns:
+        List[str]: Extracted keywords (max 5)
+    """
     stop_words = {'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 
                   'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 
                   'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its',
@@ -284,7 +362,18 @@ def get_top_matches(
     key: str = "description",
     top_n: int = 5
 ) -> List[Dict[str, Any]]:
-    """Content-based recommendation using TF-IDF + Cosine Similarity."""
+    """
+    Content-based recommendation using TF-IDF + Cosine Similarity.
+    
+    Args:
+        query: Search query
+        dataset: List of items to search
+        key: Key to use for text content
+        top_n: Number of results to return
+    
+    Returns:
+        List[Dict[str, Any]]: Top N matched items with similarity scores
+    """
     if not dataset:
         return []
     
@@ -338,7 +427,20 @@ def recommend_from_category(
     category: str,
     top_n: int = 5
 ) -> List[Dict[str, Any]]:
-    """Get recommendations from a specific category in dummy data."""
+    """
+    Get recommendations from a specific category in dummy data.
+    
+    Args:
+        query: Search query
+        category: Category name (e.g., 'forums', 'events')
+        top_n: Number of results to return
+    
+    Returns:
+        List[Dict[str, Any]]: Recommendations from the category
+    
+    Raises:
+        HTTPException: If category doesn't exist
+    """
     if category not in DUMMY_DATA:
         raise HTTPException(
             status_code=404,
@@ -364,69 +466,101 @@ def recommend_from_category(
 
 
 
-@app.get("/")
-async def home():
-    """Serve the main HTML page"""
+@app.get("/", response_model=HealthCheckResponse)
+async def home() -> Union[FileResponse, HealthCheckResponse]:
+    """Serve the main HTML page or return API info"""
     html_path = STATIC_DIR / "index.html"
     if html_path.exists():
         return FileResponse(html_path)
-    return {
-        "message": "Student Recommendation API",
-        "version": "1.0.0",
-        "status": "running",
-        "groq_enabled": groq_client is not None
-    }
+    return HealthCheckResponse(
+        message="Student Recommendation API",
+        version="1.0.0",
+        status="running",
+        groq_enabled=groq_client is not None,
+        data_loaded=bool(DUMMY_DATA)
+    )
 
-@app.get("/api")
-async def api_info():
-    """API health check endpoint"""
-    return {
-        "message": "Student Recommendation API",
-        "version": "1.0.0",
-        "status": "running",
-        "groq_enabled": groq_client is not None
-    }
+@app.get("/api", response_model=HealthCheckResponse)
+async def api_info() -> HealthCheckResponse:
+    """API health check endpoint with detailed status"""
+    return HealthCheckResponse(
+        message="Student Recommendation API",
+        version="1.0.0",
+        status="running",
+        groq_enabled=groq_client is not None,
+        data_loaded=bool(DUMMY_DATA)
+    )
 
 
-@app.post("/onboard")
-async def onboard_student(student: StudentOnboard):
+@app.post("/onboard", response_model=OnboardingResponse, status_code=status.HTTP_201_CREATED)
+async def onboard_student(student: StudentOnboard) -> OnboardingResponse:
     """
     Onboard a new student by saving their profile information.
-    Automatically generates incremental ID starting from 1.
+    
+    Validates all input fields and automatically generates incremental ID.
+    
+    Args:
+        student: StudentOnboard model with validated student data
+    
+    Returns:
+        OnboardingResponse with success message and student profile
+    
+    Raises:
+        HTTPException: If data validation fails or save operation fails
     """
-    student_data = student.dict()
+    student_data = student.model_dump()
     student_data["id"] = get_next_student_id()
     
     try:
         save_student_data(student_data)
-        return {
-            "message": "Student onboarded successfully",
-            "student": student_data
-        }
+        
+        # Create validated response
+        student_profile = StudentProfile(**student_data)
+        
+        return OnboardingResponse(
+            message="Student onboarded successfully",
+            student=student_profile
+        )
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save student data: {str(e)}"
         )
 
 
-@app.get("/student")
-async def get_student():
-    """Get current student profile."""
+@app.get("/student", response_model=StudentProfile)
+async def get_student() -> StudentProfile:
+    """
+    Get current student profile.
+    
+    Returns:
+        StudentProfile: Validated student profile data
+    
+    Raises:
+        HTTPException: If no student profile exists
+    """
     student_data = load_student_data()
     
     if not student_data:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="No student profile found. Please onboard first using POST /onboard"
         )
     
-    return student_data
+    return StudentProfile(**student_data)
 
 
 @app.post("/recommend/forums", response_model=RecommendationResponse)
-async def recommend_forums(req: RecommendationQuery):
-    """Recommend forums based on user query and student profile."""
+async def recommend_forums(req: RecommendationQuery) -> RecommendationResponse:
+    """
+    Recommend forums based on user query and student profile.
+    
+    Args:
+        req: RecommendationQuery with validated query and optional student_id
+    
+    Returns:
+        RecommendationResponse: Query results with recommendations and keywords
+    """
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -438,8 +572,11 @@ async def recommend_forums(req: RecommendationQuery):
         top_n=5
     )
     
+    # Create response with optional student profile
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -447,8 +584,16 @@ async def recommend_forums(req: RecommendationQuery):
 
 
 @app.post("/recommend/learning", response_model=RecommendationResponse)
-async def recommend_learning(req: RecommendationQuery):
-    """Recommend learning content based on user query and student profile."""
+async def recommend_learning(req: RecommendationQuery) -> RecommendationResponse:
+    """
+    Recommend learning content based on user query and student profile.
+    
+    Args:
+        req: RecommendationQuery with validated query and optional student_id
+    
+    Returns:
+        RecommendationResponse: Learning content recommendations
+    """
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -462,8 +607,10 @@ async def recommend_learning(req: RecommendationQuery):
         top_n=10
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -471,7 +618,7 @@ async def recommend_learning(req: RecommendationQuery):
 
 
 @app.post("/recommend/wellness", response_model=RecommendationResponse)
-async def recommend_wellness(req: RecommendationQuery):
+async def recommend_wellness(req: RecommendationQuery) -> RecommendationResponse:
     """Recommend wellness content based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
@@ -485,8 +632,10 @@ async def recommend_wellness(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -494,7 +643,7 @@ async def recommend_wellness(req: RecommendationQuery):
 
 
 @app.post("/recommend/opportunities", response_model=RecommendationResponse)
-async def recommend_opportunities(req: RecommendationQuery):
+async def recommend_opportunities(req: RecommendationQuery) -> RecommendationResponse:
     """Recommend opportunities based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
@@ -507,8 +656,10 @@ async def recommend_opportunities(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -516,7 +667,7 @@ async def recommend_opportunities(req: RecommendationQuery):
 
 
 @app.post("/recommend/events", response_model=RecommendationResponse)
-async def recommend_events(req: RecommendationQuery):
+async def recommend_events(req: RecommendationQuery) -> RecommendationResponse:
     """Recommend events based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
@@ -529,8 +680,10 @@ async def recommend_events(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -538,7 +691,7 @@ async def recommend_events(req: RecommendationQuery):
 
 
 @app.post("/recommend/scholarships", response_model=RecommendationResponse)
-async def recommend_scholarships(req: RecommendationQuery):
+async def recommend_scholarships(req: RecommendationQuery) -> RecommendationResponse:
     """Recommend scholarships based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
@@ -551,8 +704,10 @@ async def recommend_scholarships(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -560,10 +715,8 @@ async def recommend_scholarships(req: RecommendationQuery):
 
 
 @app.post("/recommend/confessions", response_model=RecommendationResponse)
-async def recommend_confessions(req: RecommendationQuery):
-    """
-    Recommend confessions based on user query and student profile.
-    """
+async def recommend_confessions(req: RecommendationQuery) -> RecommendationResponse:
+    """Recommend confessions based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -575,8 +728,10 @@ async def recommend_confessions(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -584,11 +739,8 @@ async def recommend_confessions(req: RecommendationQuery):
 
 
 @app.post("/recommend/flashcards", response_model=RecommendationResponse)
-async def recommend_flashcards(req: RecommendationQuery):
-    """
-    Recommend flashcards based on user query and student profile.
-    Considers enrolled courses and study interests.
-    """
+async def recommend_flashcards(req: RecommendationQuery) -> RecommendationResponse:
+    """Recommend flashcards based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -600,8 +752,10 @@ async def recommend_flashcards(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -609,11 +763,8 @@ async def recommend_flashcards(req: RecommendationQuery):
 
 
 @app.post("/recommend/qna", response_model=RecommendationResponse)
-async def recommend_qna(req: RecommendationQuery):
-    """
-    Recommend Q&A content based on user query and student profile.
-    Considers enrolled courses and academic interests.
-    """
+async def recommend_qna(req: RecommendationQuery) -> RecommendationResponse:
+    """Recommend Q&A content based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -625,8 +776,10 @@ async def recommend_qna(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -634,11 +787,8 @@ async def recommend_qna(req: RecommendationQuery):
 
 
 @app.post("/recommend/truefalse", response_model=RecommendationResponse)
-async def recommend_truefalse(req: RecommendationQuery):
-    """
-    Recommend True/False question sets based on user query and student profile.
-    Considers enrolled courses and subjects of interest.
-    """
+async def recommend_truefalse(req: RecommendationQuery) -> RecommendationResponse:
+    """Recommend True/False question sets based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -650,8 +800,10 @@ async def recommend_truefalse(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -659,11 +811,8 @@ async def recommend_truefalse(req: RecommendationQuery):
 
 
 @app.post("/recommend/mcq", response_model=RecommendationResponse)
-async def recommend_mcq(req: RecommendationQuery):
-    """
-    Recommend MCQ sets based on user query and student profile.
-    Considers enrolled courses and subjects of interest.
-    """
+async def recommend_mcq(req: RecommendationQuery) -> RecommendationResponse:
+    """Recommend MCQ sets based on user query and student profile."""
     student_data = load_student_data()
     keywords = extract_keywords_with_groq(req.query)
     
@@ -675,8 +824,10 @@ async def recommend_mcq(req: RecommendationQuery):
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=student_data,
+        student=student_profile,
         query=req.query,
         extracted_keywords=keywords,
         recommendations=recommendations
@@ -684,82 +835,82 @@ async def recommend_mcq(req: RecommendationQuery):
 
 
 # ============================================
-# Legacy GET endpoints (for backward compatibility)
+# Legacy GET endpoints with type hints
 # ============================================
 
-@app.get("/forums")
-async def get_forums():
+@app.get("/forums", response_model=List[Dict[str, Any]])
+async def get_forums() -> List[Dict[str, Any]]:
     """Get all forums"""
-    return DUMMY_DATA["forums"]
+    return DUMMY_DATA.get("forums", [])
 
 
-@app.get("/learning")
-async def get_learning_content():
+@app.get("/learning", response_model=Dict[str, List[Dict[str, Any]]])
+async def get_learning_content() -> Dict[str, List[Dict[str, Any]]]:
     """Get all learning content"""
     return {
-        "bundles": DUMMY_DATA["bundles"],
-        "learning_courses": DUMMY_DATA["learning_courses"],
-        "learning_sets": DUMMY_DATA["learning_sets"],
-        "practice_sets": DUMMY_DATA["practice_sets"]
+        "bundles": DUMMY_DATA.get("bundles", []),
+        "learning_courses": DUMMY_DATA.get("learning_courses", []),
+        "learning_sets": DUMMY_DATA.get("learning_sets", []),
+        "practice_sets": DUMMY_DATA.get("practice_sets", [])
     }
 
 
-@app.get("/wellness")
-async def get_wellness():
+@app.get("/wellness", response_model=Dict[str, List[Dict[str, Any]]])
+async def get_wellness() -> Dict[str, List[Dict[str, Any]]]:
     """Get all wellness content"""
     return {
-        "wellness_challenges": DUMMY_DATA["wellness_challenges"],
-        "wellness_content": DUMMY_DATA["wellness_content"],
-        "wellness_activities": DUMMY_DATA["wellness_activities"]
+        "wellness_challenges": DUMMY_DATA.get("wellness_challenges", []),
+        "wellness_content": DUMMY_DATA.get("wellness_content", []),
+        "wellness_activities": DUMMY_DATA.get("wellness_activities", [])
     }
 
 
-@app.get("/opportunities")
-async def get_opportunities():
+@app.get("/opportunities", response_model=List[Dict[str, Any]])
+async def get_opportunities() -> List[Dict[str, Any]]:
     """Get all opportunities"""
-    return DUMMY_DATA["opportunities"]
+    return DUMMY_DATA.get("opportunities", [])
 
 
-@app.get("/events")
-async def get_events():
+@app.get("/events", response_model=List[Dict[str, Any]])
+async def get_events() -> List[Dict[str, Any]]:
     """Get all events"""
-    return DUMMY_DATA["events"]
+    return DUMMY_DATA.get("events", [])
 
 
-@app.get("/scholarships")
-async def get_scholarships():
+@app.get("/scholarships", response_model=List[Dict[str, Any]])
+async def get_scholarships() -> List[Dict[str, Any]]:
     """Get all scholarships"""
-    return DUMMY_DATA["scholarships"]
+    return DUMMY_DATA.get("scholarships", [])
 
 
-@app.get("/confessions")
-async def get_confessions():
+@app.get("/confessions", response_model=List[Dict[str, Any]])
+async def get_confessions() -> List[Dict[str, Any]]:
     """Get all confessions"""
-    return DUMMY_DATA["confessions"]
+    return DUMMY_DATA.get("confessions", [])
 
 
-@app.get("/flashcards")
-async def get_flashcards():
+@app.get("/flashcards", response_model=List[Dict[str, Any]])
+async def get_flashcards() -> List[Dict[str, Any]]:
     """Get all flashcards"""
-    return DUMMY_DATA["flashcards"]
+    return DUMMY_DATA.get("flashcards", [])
 
 
-@app.get("/qna")
-async def get_qna():
+@app.get("/qna", response_model=List[Dict[str, Any]])
+async def get_qna() -> List[Dict[str, Any]]:
     """Get all Q&A"""
-    return DUMMY_DATA["qna"]
+    return DUMMY_DATA.get("qna", [])
 
 
-@app.get("/truefalse")
-async def get_truefalse():
+@app.get("/truefalse", response_model=List[Dict[str, Any]])
+async def get_truefalse() -> List[Dict[str, Any]]:
     """Get all True/False questions"""
-    return DUMMY_DATA["true_false"]
+    return DUMMY_DATA.get("true_false", [])
 
 
-@app.get("/mcq")
-async def get_mcq():
+@app.get("/mcq", response_model=List[Dict[str, Any]])
+async def get_mcq() -> List[Dict[str, Any]]:
     """Get all MCQ sets"""
-    return DUMMY_DATA["mcq"]
+    return DUMMY_DATA.get("mcq", [])
 
 
 if __name__ == "__main__":

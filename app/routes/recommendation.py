@@ -7,9 +7,11 @@ Smart content-based recommendation system that considers:
 3. Student courses enrolled
 4. TF-IDF + Cosine Similarity matching
 5. Semantic understanding via Groq API
+
+All functions include comprehensive type hints and input validation.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -44,17 +46,29 @@ def enhance_query_with_student_context(
     - Student courses enrolled
     
     This helps recommendations be more personalized.
+    
+    Args:
+        query: Original user query
+        student_data: Optional student profile data
+    
+    Returns:
+        str: Enhanced query with student context
     """
-    enhanced_query = query
+    if not query or not isinstance(query, str):
+        raise ValueError("Query must be a non-empty string")
+    
+    enhanced_query = query.strip()
     
     if student_data:
         if "interests" in student_data and student_data["interests"]:
-            interests = " ".join(student_data["interests"])
-            enhanced_query = f"{enhanced_query} {interests}"
+            if isinstance(student_data["interests"], list):
+                interests = " ".join(str(i) for i in student_data["interests"] if i)
+                enhanced_query = f"{enhanced_query} {interests}"
         
         if "courses_enrolled" in student_data and student_data["courses_enrolled"]:
-            courses = " ".join(student_data["courses_enrolled"])
-            enhanced_query = f"{enhanced_query} {courses}"
+            if isinstance(student_data["courses_enrolled"], list):
+                courses = " ".join(str(c) for c in student_data["courses_enrolled"] if c)
+                enhanced_query = f"{enhanced_query} {courses}"
     
     return enhanced_query
 
@@ -63,11 +77,28 @@ def semantic_relevance_check(
     query: str,
     item_text: str,
     threshold: float = 0.30
-) -> tuple[bool, float]:
+) -> Tuple[bool, float]:
     """
     Use Groq API to check if an item is semantically relevant to the query.
     This helps filter out false positives from TF-IDF matching.
+    
+    Args:
+        query: User search query
+        item_text: Item content to check
+        threshold: Minimum relevance score (0.0-1.0)
+    
+    Returns:
+        Tuple[bool, float]: (is_relevant, relevance_score)
     """
+    # Input validation
+    if not query or not isinstance(query, str):
+        return True, 0.5
+    
+    if not item_text or not isinstance(item_text, str):
+        return True, 0.5
+    
+    if not isinstance(threshold, (int, float)) or not (0.0 <= threshold <= 1.0):
+        threshold = 0.30
     if not groq_client:
         return True, 0.5
     
@@ -132,9 +163,36 @@ def get_recommendations(
     min_similarity: float = 0.0,
     use_semantic_check: bool = True
 ) -> List[Dict[str, Any]]:
-    """Get personalized recommendations using TF-IDF + Cosine Similarity + Semantic Check."""
+    """
+    Get personalized recommendations using TF-IDF + Cosine Similarity + Semantic Check.
+    
+    Args:
+        query: User search query
+        dataset: List of items to search
+        student_data: Optional student profile for personalization
+        content_key: Key to use for primary content (default: "description")
+        top_n: Number of results to return
+        min_similarity: Minimum similarity threshold (0.0-1.0)
+        use_semantic_check: Whether to use Groq API for semantic validation
+    
+    Returns:
+        List[Dict[str, Any]]: Recommended items with similarity scores
+    """
+    # Input validation
+    if not query or not isinstance(query, str):
+        raise ValueError("Query must be a non-empty string")
+    
+    if not isinstance(dataset, list):
+        raise ValueError("Dataset must be a list")
+    
     if not dataset:
         return []
+    
+    if not isinstance(top_n, int) or top_n < 1:
+        top_n = 10
+    
+    if not isinstance(min_similarity, (int, float)) or not (0.0 <= min_similarity <= 1.0):
+        min_similarity = 0.0
     
     enhanced_query = enhance_query_with_student_context(query, student_data)
     
