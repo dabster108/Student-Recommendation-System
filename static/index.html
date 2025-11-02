@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Recommendation System</title>
+    <title>Student Recommendation System v2.0 - Updated API</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <style>
         * {
             margin: 0;
@@ -471,6 +474,14 @@
 
     <script>
         const API_BASE = 'http://localhost:8000';
+        let currentStudentId = null; // Track the current student ID
+        let currentCategory = 'forums'; // Default category
+        
+        // FORCE CACHE REFRESH - Updated API calls for student-specific recommendations
+        // VERSION: 2.0.1 - Student ID Based API - November 2025
+        console.log('🚀 Loading UPDATED Student Recommendation System v2.0.1');
+        console.log('📡 New API Format: POST /recommend/{student_id}/{category}?query=...');
+        console.log('🔄 Cache refresh timestamp:', new Date().toISOString());
 
         // Always start with onboarding form (fresh start)
         // Comment out the auto-load logic below if you want fresh start every time
@@ -520,6 +531,8 @@
 
                 if (response.ok) {
                     const result = await response.json();
+                    currentStudentId = result.student.id; // Store the student ID
+                    console.log('✅ Student onboarded successfully! Student ID:', currentStudentId);
                     showMessage('Onboarding successful! Loading recommendations...', 'success');
                     setTimeout(() => {
                         showRecommendationSection(result.student);
@@ -536,8 +549,6 @@
                 submitBtn.textContent = 'Complete Onboarding';
             }
         });
-
-        let currentCategory = 'forums'; // Default category
 
         // Tab switching
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -564,6 +575,11 @@
                 return;
             }
 
+            if (!currentStudentId) {
+                alert('Student ID not found. Please complete onboarding first.');
+                return;
+            }
+
             const searchBtn = document.getElementById('searchBtn');
             searchBtn.disabled = true;
             searchBtn.textContent = 'Searching...';
@@ -571,13 +587,18 @@
             const resultsContainer = document.getElementById('resultsContainer');
             resultsContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Extracting keywords with Groq AI...</p></div>';
 
+            // Debug logging
+            console.log('🔍 Making API call with:');
+            console.log('Student ID:', currentStudentId);
+            console.log('Category:', currentCategory);
+            console.log('Query:', query);
+            
+            const apiUrl = `${API_BASE}/recommend/${currentStudentId}/${currentCategory}?query=${encodeURIComponent(query)}`;
+            console.log('🌐 API URL:', apiUrl);
+
             try {
-                const response = await fetch(`${API_BASE}/recommend/${currentCategory}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ query })
+                const response = await fetch(apiUrl, {
+                    method: 'POST'
                 });
 
                 if (response.ok) {

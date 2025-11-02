@@ -12,5 +12,89 @@
       "Data Structures"
     ],
     "id": 4
+  },
+  {
+    "name": "Dikshanta",
+    "username": "asdasdada",
+    "address": "asdasdsada",
+    "faculty": "Science",
+    "grade": "Freshman",
+    "interests": [
+      "programming"
+    ],
+    "courses_enrolled": [
+      "Data Structures"
+    ],
+    "id": 5
+  },
+  {
+    "name": "dikshanta",
+    "username": "240226",
+    "address": "Budhanilkantha",
+    "faculty": "Business",
+    "grade": "Freshman",
+    "interests": [
+      "Software Development"
+    ],
+    "courses_enrolled": [
+      "Data Structures"
+    ],
+    "id": 6
+  },
+  {
+    "name": "Dikshanta",
+    "username": "_isspamallowed_",
+    "address": "Budhanilkantha",
+    "faculty": "Science",
+    "grade": "Freshman",
+    "interests": [
+      "Software Development"
+    ],
+    "courses_enrolled": [
+      "Data Structures"
+    ],
+    "id": 7
+  },
+  {
+    "name": "Dikshanta",
+    "username": "_isspamallowed_",
+    "address": "lalitpur",
+    "faculty": "Science",
+    "grade": "Freshman",
+    "interests": [
+      "Software Development"
+    ],
+    "courses_enrolled": [
+      "Data Structures"
+    ],
+    "id": 8
+  },
+  {
+    "name": "shshshs",
+    "username": "softwarica",
+    "address": "lalitpur",
+    "faculty": "Science",
+    "grade": "Sophomore",
+    "interests": [
+      "programming"
+    ],
+    "courses_enrolled": [
+      "Data Structures"
+    ],
+    "id": 9
+  },
+  {
+    "name": "dikshanta",
+    "username": "_isspamallowed_",
+    "address": "Budhanilkantha",
+    "faculty": "Science",
+    "grade": "Freshman",
+    "interests": [
+      "Software Development"
+    ],
+    "courses_enrolled": [
+      "Data Structures"
+    ],
+    "id": 10
   }
 ]
