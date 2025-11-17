@@ -1,11 +1,9 @@
 """
-Student Recommendation POC - FastAPI Backend
-============================================
+Student Recommendation POC - FastAPI Backen
 A prototype recommendation system that collects student info and provides 
 personalized content recommendations using TF-IDF + Cosine Similarity with 
 Groq API for keyword extraction.
 """
-
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
