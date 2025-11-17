@@ -593,29 +593,19 @@ async def get_all_students() -> List[StudentProfile]:
     return [StudentProfile(**student) for student in students]
 
 
-@app.get("/recommend/{student_id}/forums", response_model=RecommendationResponse)
-async def recommend_forums_for_student(student_id: int, query: str) -> RecommendationResponse:
+@app.get("/recommend/forums", response_model=RecommendationResponse)
+async def recommend_forums_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend forums for a specific student.
+    Recommend forums for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Personalized forum recommendations
-    
-    Raises:
-        HTTPException: If student not found
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     forums_data = DUMMY_DATA.get("forums", [])
@@ -626,7 +616,7 @@ async def recommend_forums_for_student(student_id: int, query: str) -> Recommend
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -636,29 +626,19 @@ async def recommend_forums_for_student(student_id: int, query: str) -> Recommend
     )
 
 
-@app.post("/recommend/{student_id}/forums", response_model=RecommendationResponse)
-async def recommend_forums_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/forums", response_model=RecommendationResponse)
+async def recommend_forums_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend forums for a specific student.
+    Recommend forums for a student (POST version).
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Personalized forum recommendations
-    
-    Raises:
-        HTTPException: If student not found
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     forums_data = DUMMY_DATA.get("forums", [])
@@ -669,7 +649,7 @@ async def recommend_forums_for_student_post(student_id: int, query: str) -> Reco
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -679,29 +659,19 @@ async def recommend_forums_for_student_post(student_id: int, query: str) -> Reco
     )
 
 
-@app.post("/recommend/{student_id}/learning", response_model=RecommendationResponse)
-async def recommend_learning_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/learning", response_model=RecommendationResponse)
+async def recommend_learning_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend learning content for a specific student.
+    Recommend learning content for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Personalized learning recommendations
-    
-    Raises:
-        HTTPException: If student not found
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     recommendations = rec_engine.recommend_learning_content(
@@ -714,7 +684,7 @@ async def recommend_learning_for_student_post(student_id: int, query: str) -> Re
         top_n=10
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -724,26 +694,19 @@ async def recommend_learning_for_student_post(student_id: int, query: str) -> Re
     )
 
 
-@app.get("/recommend/{student_id}/learning", response_model=RecommendationResponse)
-async def recommend_learning_for_student(student_id: int, query: str) -> RecommendationResponse:
+@app.get("/recommend/learning", response_model=RecommendationResponse)
+async def recommend_learning_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend learning content for a specific student.
+    Recommend learning content for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Personalized learning recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     recommendations = rec_engine.recommend_learning_content(
@@ -756,7 +719,7 @@ async def recommend_learning_for_student(student_id: int, query: str) -> Recomme
         top_n=10
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -766,26 +729,19 @@ async def recommend_learning_for_student(student_id: int, query: str) -> Recomme
     )
 
 
-@app.post("/recommend/{student_id}/wellness", response_model=RecommendationResponse)
-async def recommend_wellness_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/wellness", response_model=RecommendationResponse)
+async def recommend_wellness_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend wellness content for a specific student.
+    Recommend wellness content for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Wellness content recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     recommendations = rec_engine.recommend_wellness(
@@ -797,7 +753,7 @@ async def recommend_wellness_for_student_post(student_id: int, query: str) -> Re
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -807,26 +763,19 @@ async def recommend_wellness_for_student_post(student_id: int, query: str) -> Re
     )
 
 
-@app.post("/recommend/{student_id}/opportunities", response_model=RecommendationResponse)
-async def recommend_opportunities_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/opportunities", response_model=RecommendationResponse)
+async def recommend_opportunities_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend opportunities for a specific student.
+    Recommend opportunities for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Opportunities recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     opportunities_data = DUMMY_DATA.get("opportunities", [])
@@ -837,7 +786,7 @@ async def recommend_opportunities_for_student_post(student_id: int, query: str) 
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -847,26 +796,19 @@ async def recommend_opportunities_for_student_post(student_id: int, query: str) 
     )
 
 
-@app.post("/recommend/{student_id}/events", response_model=RecommendationResponse)
-async def recommend_events_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/events", response_model=RecommendationResponse)
+async def recommend_events_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend events for a specific student.
+    Recommend events for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Events recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     events_data = DUMMY_DATA.get("events", [])
@@ -877,7 +819,7 @@ async def recommend_events_for_student_post(student_id: int, query: str) -> Reco
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -887,26 +829,19 @@ async def recommend_events_for_student_post(student_id: int, query: str) -> Reco
     )
 
 
-@app.post("/recommend/{student_id}/scholarships", response_model=RecommendationResponse)
-async def recommend_scholarships_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/scholarships", response_model=RecommendationResponse)
+async def recommend_scholarships_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend scholarships for a specific student.
+    Recommend scholarships for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Scholarships recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     scholarships_data = DUMMY_DATA.get("scholarships", [])
@@ -917,7 +852,7 @@ async def recommend_scholarships_for_student_post(student_id: int, query: str) -
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -927,26 +862,19 @@ async def recommend_scholarships_for_student_post(student_id: int, query: str) -
     )
 
 
-@app.post("/recommend/{student_id}/confessions", response_model=RecommendationResponse)
-async def recommend_confessions_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/confessions", response_model=RecommendationResponse)
+async def recommend_confessions_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend confessions for a specific student.
+    Recommend confessions for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Confessions recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     confessions_data = DUMMY_DATA.get("confessions", [])
@@ -957,7 +885,7 @@ async def recommend_confessions_for_student_post(student_id: int, query: str) ->
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -967,26 +895,19 @@ async def recommend_confessions_for_student_post(student_id: int, query: str) ->
     )
 
 
-@app.post("/recommend/{student_id}/flashcards", response_model=RecommendationResponse)
-async def recommend_flashcards_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/flashcards", response_model=RecommendationResponse)
+async def recommend_flashcards_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend flashcards for a specific student.
+    Recommend flashcards for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Flashcards recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     flashcards_data = DUMMY_DATA.get("flashcards", [])
@@ -997,7 +918,7 @@ async def recommend_flashcards_for_student_post(student_id: int, query: str) -> 
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -1007,26 +928,19 @@ async def recommend_flashcards_for_student_post(student_id: int, query: str) -> 
     )
 
 
-@app.post("/recommend/{student_id}/qna", response_model=RecommendationResponse)
-async def recommend_qna_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/qna", response_model=RecommendationResponse)
+async def recommend_qna_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend Q&A content for a specific student.
+    Recommend Q&A content for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: Q&A recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     qna_data = DUMMY_DATA.get("qna", [])
@@ -1037,7 +951,7 @@ async def recommend_qna_for_student_post(student_id: int, query: str) -> Recomme
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -1047,26 +961,19 @@ async def recommend_qna_for_student_post(student_id: int, query: str) -> Recomme
     )
 
 
-@app.post("/recommend/{student_id}/truefalse", response_model=RecommendationResponse)
-async def recommend_truefalse_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/truefalse", response_model=RecommendationResponse)
+async def recommend_truefalse_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend True/False question sets for a specific student.
+    Recommend True/False question sets for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: True/False recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     truefalse_data = DUMMY_DATA.get("true_false", [])
@@ -1077,7 +984,7 @@ async def recommend_truefalse_for_student_post(student_id: int, query: str) -> R
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -1087,26 +994,19 @@ async def recommend_truefalse_for_student_post(student_id: int, query: str) -> R
     )
 
 
-@app.post("/recommend/{student_id}/mcq", response_model=RecommendationResponse)
-async def recommend_mcq_for_student_post(student_id: int, query: str) -> RecommendationResponse:
+@app.post("/recommend/mcq", response_model=RecommendationResponse)
+async def recommend_mcq_post(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """
-    Recommend MCQ sets for a specific student.
+    Recommend MCQ sets for a student.
     
     Args:
-        student_id: The student ID
         query: Search query
+        student_id: Optional student ID (query parameter)
     
     Returns:
         RecommendationResponse: MCQ recommendations
     """
-    student_data = get_student_by_id(student_id)
-    
-    if not student_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with ID {student_id} not found"
-        )
-    
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
     
     mcq_data = DUMMY_DATA.get("mcq", [])
@@ -1117,7 +1017,7 @@ async def recommend_mcq_for_student_post(student_id: int, query: str) -> Recomme
         top_n=5
     )
     
-    student_profile = StudentProfile(**student_data)
+    student_profile = StudentProfile(**student_data) if student_data else None
     
     return RecommendationResponse(
         student=student_profile,
@@ -1210,14 +1110,12 @@ async def get_mcq() -> List[Dict[str, Any]]:
 # Student-Specific Recommendation Endpoints (GET with Path Parameters)
 # ============================================
 
-@app.get("/recommend/{student_id}/wellness", response_model=RecommendationResponse)
-async def recommend_wellness_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend wellness content for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/wellness", response_model=RecommendationResponse)
+async def recommend_wellness_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend wellness content for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
     recommendations = rec_engine.recommend_wellness(
         query=query,
         challenges=DUMMY_DATA.get("wellness_challenges", []),
@@ -1227,192 +1125,202 @@ async def recommend_wellness_for_student(student_id: int, query: str) -> Recomme
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/opportunities", response_model=RecommendationResponse)
-async def recommend_opportunities_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend opportunities for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/opportunities", response_model=RecommendationResponse)
+async def recommend_opportunities_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend opportunities for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    opportunities_data = DUMMY_DATA.get("opportunities", [])
     recommendations = rec_engine.recommend_opportunities(
         query=query,
-        opportunities_data=DUMMY_DATA.get("opportunities", []),
+        opportunities_data=opportunities_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/events", response_model=RecommendationResponse)
-async def recommend_events_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend events for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/events", response_model=RecommendationResponse)
+async def recommend_events_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend events for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    events_data = DUMMY_DATA.get("events", [])
     recommendations = rec_engine.recommend_events(
         query=query,
-        events_data=DUMMY_DATA.get("events", []),
+        events_data=events_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/scholarships", response_model=RecommendationResponse)
-async def recommend_scholarships_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend scholarships for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/scholarships", response_model=RecommendationResponse)
+async def recommend_scholarships_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend scholarships for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    scholarships_data = DUMMY_DATA.get("scholarships", [])
     recommendations = rec_engine.recommend_scholarships(
         query=query,
-        scholarships_data=DUMMY_DATA.get("scholarships", []),
+        scholarships_data=scholarships_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/confessions", response_model=RecommendationResponse)
-async def recommend_confessions_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend confessions for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/confessions", response_model=RecommendationResponse)
+async def recommend_confessions_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend confessions for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    confessions_data = DUMMY_DATA.get("confessions", [])
     recommendations = rec_engine.recommend_confessions(
         query=query,
-        confessions_data=DUMMY_DATA.get("confessions", []),
+        confessions_data=confessions_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/flashcards", response_model=RecommendationResponse)
-async def recommend_flashcards_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend flashcards for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/flashcards", response_model=RecommendationResponse)
+async def recommend_flashcards_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend flashcards for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    flashcards_data = DUMMY_DATA.get("flashcards", [])
     recommendations = rec_engine.recommend_flashcards(
         query=query,
-        flashcards_data=DUMMY_DATA.get("flashcards", []),
+        flashcards_data=flashcards_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/qna", response_model=RecommendationResponse)
-async def recommend_qna_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend Q&A for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/qna", response_model=RecommendationResponse)
+async def recommend_qna_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend Q&A for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    qna_data = DUMMY_DATA.get("qna", [])
     recommendations = rec_engine.recommend_qna(
         query=query,
-        qna_data=DUMMY_DATA.get("qna", []),
+        qna_data=qna_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/truefalse", response_model=RecommendationResponse)
-async def recommend_truefalse_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend True/False questions for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/truefalse", response_model=RecommendationResponse)
+async def recommend_truefalse_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend True/False questions for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    truefalse_data = DUMMY_DATA.get("true_false", [])
     recommendations = rec_engine.recommend_truefalse(
         query=query,
-        truefalse_data=DUMMY_DATA.get("true_false", []),
+        truefalse_data=truefalse_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
     )
 
 
-@app.get("/recommend/{student_id}/mcq", response_model=RecommendationResponse)
-async def recommend_mcq_for_student(student_id: int, query: str) -> RecommendationResponse:
-    """Recommend MCQ sets for a specific student."""
-    student_data = get_student_by_id(student_id)
-    if not student_data:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
-    
+@app.get("/recommend/mcq", response_model=RecommendationResponse)
+async def recommend_mcq_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
+    """Recommend MCQ sets for a student."""
+    student_data = resolve_student_for_request(student_id)
     keywords = extract_keywords_with_groq(query)
+    
+    mcq_data = DUMMY_DATA.get("mcq", [])
     recommendations = rec_engine.recommend_mcq(
         query=query,
-        mcq_data=DUMMY_DATA.get("mcq", []),
+        mcq_data=mcq_data,
         student_data=student_data,
         top_n=5
     )
     
+    student_profile = StudentProfile(**student_data) if student_data else None
+    
     return RecommendationResponse(
-        student=StudentProfile(**student_data),
+        student=student_profile,
         query=query,
         extracted_keywords=keywords,
         recommendations=recommendations
