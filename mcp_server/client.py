@@ -1,181 +1,202 @@
 import asyncio
 import os
-import httpx
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
+# from fastmcp.client import Client
+import httpx
+from fastmcp import FastMCP, Client
 
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Create an HTTP client for your API
+client = httpx.AsyncClient(base_url="http://127.0.0.1:8000")
 
-# FastAPI base URL - Direct connection to main FastAPI server for data operations
-API_BASE_URL = "http://127.0.0.1:8000"
+# Load your OpenAPI spec 
+openapi_spec = httpx.get("http://127.0.0.1:8000/openapi.json").json()
 
-# MCP Server URL - For AI tool integration (if needed later)
-MCP_SERVER_URL = "http://127.0.0.1:8001"
+# Filter out GET recommendation endpoints - keep only POST
+def filter_operations(spec):
+    """Remove GET /recommend/* endpoints, keep only POST"""
+    filtered_paths = {}
+    for path, methods in spec.get("paths", {}).items():
+        if path.startswith("/recommend/"):
+            # Only keep POST methods for recommendation endpoints
+            filtered_methods = {method: details for method, details in methods.items() if method == "post"}
+            if filtered_methods:
+                filtered_paths[path] = filtered_methods
+        else:
+            # Keep all other endpoints as-is
+            filtered_paths[path] = methods
+    
+    spec["paths"] = filtered_paths
+    return spec
 
-def display_menu():
-    """Display the main menu options to the user."""
-    print("\n" + "="*50)
-    print("Student Recommendation Chatbot")
-    print("="*50)
-    print("Please select a category:")
-    print("1.Forums")
-    print("2.Learning")
-    print("3.Wellness")
-    print("4.Opportunities")
-    print("5.Events")
-    print("6.Exit")
-    print("="*50)
+# Filter the spec before creating MCP server
+filtered_spec = filter_operations(openapi_spec)
 
-async def get_recommendations(category: str, query: str, student_id: int = None):
-    """Make POST request to FastAPI recommendation endpoint."""
-    try:
-        async with httpx.AsyncClient() as client:
-            url = f"{API_BASE_URL}/recommend/{category}"
-            
-            # Prepare parameters
-            params = {"query": query}
-            if student_id:
-                params["student_id"] = student_id
+# Create the MCP server with filtered spec
+mcp = FastMCP.from_openapi(
+    openapi_spec=filtered_spec,
+    client=client,
+    name="My API Server"
+)
+mcp_client = Client(mcp)
+# MCP Server URL - MCP server runs on port 8001 (FastAPI app runs on 8000)
+MCP_SERVER_URL = "http://localhost:8001/mcp"
+
+# Initialize Gemini client
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY not found in environment variables")
+
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
+
+async def demo_recommendations():
+    """Demo function to test all recommendation endpoints"""
+    async with Client(MCP_SERVER_URL) as client:
+        print("=" * 60)
+        print("MCP Client - Student Recommendation System Demo")
+        print("=" * 60)
+        
+        # List available tools
+        tools = await client.list_tools()
+        print(f"\nAvailable tools: {len(tools)}")
+        for tool in tools:
+            if "recommend" in tool.name.lower():
+                print(f"  - {tool.name}")
+        
+        print("\n" + "=" * 60)
+        
+        # Test various recommendation endpoints
+        test_queries = [
+            ("recommend_forums_post", {"query": "machine learning discussions"}),
+            ("recommend_learning_post", {"query": "python programming tutorials"}),
+            ("recommend_wellness_post", {"query": "stress management tips"}),
+            ("recommend_events_post", {"query": "tech hackathons"}),
+            ("recommend_scholarships_post", {"query": "computer science scholarships"}),
+        ]
+        
+        for tool_name, params in test_queries:
+            try:
+                print(f"\nTesting: {tool_name}")
+                print(f"   Query: {params['query']}")
+                result = await client.call_tool(tool_name, params)
+                print(f"   [SUCCESS] Results: {len(result.data.get('recommendations', []))} items found")
+            except Exception as e:
+                print(f"   [ERROR] {e}")
+
+
+async def chat_loop():
+    """Interactive chat loop with Gemini using MCP tools"""
+    async with mcp_client as client:
+        print("\n" + "=" * 60)
+        print("Student Recommendation AI Assistant")
+        print("=" * 60)
+        print("Ask me for recommendations on:")
+        print("  - Forums, Learning Materials, Wellness Resources")
+        print("  - Events, Scholarships, Opportunities")
+        print("  - Study Materials (Flashcards, Q&A, MCQs, True/False)")
+        print("  - Confessions (Anonymous discussions)")
+        print("\nType 'exit', 'quit', or 'q' to end the conversation")
+        print("=" * 60 + "\n")
+        
+        # Chat history for context
+        chat_history = []
+        
+        while True:
+            try:
+                # Get user input
+                user_input = input("You: ").strip()
                 
-            response = await client.post(url, params=params)
-            response.raise_for_status()
-            
-            return response.json()
-            
-    except httpx.HTTPStatusError as e:
-        print(f"❌ HTTP Error {e.response.status_code}: {e.response.text}")
-        return None
-    except httpx.RequestError as e:
-        print(f"❌ Request Error: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Unexpected Error: {e}")
-        return None
-
-async def process_recommendation(category: str, user_input: str):
-    """Process user input and get formatted recommendations using Gemini."""
-    print(f"\n🔍 Searching for {category} recommendations...")
-    
-    # Get recommendations from FastAPI
-    recommendations_data = await get_recommendations(category, user_input)
-    
-    if not recommendations_data:
-        print("❌ Sorry, I couldn't get recommendations at this time. Please try again later.")
-        return
-    
-    try:
-        # Use Gemini to format the response conversationally
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        # Create a prompt for Gemini to format the recommendations
-        prompt = f"""
-        You are a helpful student assistant chatbot. A student asked for {category} recommendations with the query: "{user_input}"
-        
-        Here's the API response data:
-        {recommendations_data}
-        
-        Please format this information in a friendly, conversational way. Include:
-        1. A brief acknowledgment of their request with an emoji
-        2. The top recommendations with titles, descriptions, and any relevant details
-        3. Use relevant emojis for each recommendation (📚 for learning, 💪 for wellness, 💼 for opportunities, 📅 for events, 💬 for forums)
-        4. Encourage them to explore the options
-        
-        Make it engaging and helpful, as if you're talking to a student friend.
-        Use emojis generously and keep the tone warm and supportive.
-        """
-        
-        response = model.generate_content(prompt)
-        print("\n" + "="*60)
-        print(response.text)
-        print("="*60)
-        
-    except Exception as e:
-        print(f"❌ Error formatting response with Gemini: {e}")
-        # Fallback to enhanced display with emojis
-        print("\n" + "="*60)
-        
-        # Category-specific emojis
-        emoji_map = {
-            "forums": "💬",
-            "learning": "📚",
-            "wellness": "💪",
-            "opportunities": "💼",
-            "events": "📅"
-        }
-        category_emoji = emoji_map.get(category.lower(), "🎯")
-        
-        print(f"{category_emoji} Here are your {category} recommendations:\n")
-        
-        if 'recommendations' in recommendations_data:
-            for i, rec in enumerate(recommendations_data['recommendations'][:5], 1):
-                title = rec.get('title', 'No title')
-                description = rec.get('description', rec.get('content', 'No description'))
-                similarity = rec.get('similarity_score', 0)
+                # Check for exit commands
+                if user_input.lower() in ['exit', 'quit', 'q', 'bye']:
+                    print("\nThanks for using the Student Recommendation System!")
+                    break
                 
-                print(f"{i}. ✨ {title}")
-                print(f"   📝 {description[:200]}...")
-                if similarity > 0:
-                    print(f"   🎯 Match Score: {similarity:.2%}")
-                print()
-        
-        print("="*60)
+                if not user_input:
+                    continue
+                
+                # Add user message to history
+                chat_history.append({
+                    "role": "user",
+                    "parts": [{"text": user_input}]
+                })
+                
+                # Create system instruction to guide Gemini
+                # system_instruction = """You are a helpful student recommendation assistant. 
+                # You have access to various recommendation tools for students including:
+                # - Forums, Learning materials, Wellness resources
+                # - Events, Scholarships, Opportunities
+                # - Study materials (Flashcards, Q&A, MCQs, True/False questions)
+                # - Confessions (anonymous discussions)
+                
+                # When a user asks for recommendations, use the appropriate tool to fetch relevant results.
+                # For example:
+                # - "Find me ML forums" → use recommend_forums_post with query "machine learning"
+                # - "Show python tutorials" → use recommend_learning_post with query "python tutorials"
+                # - "Any tech events?" → use recommend_events_post with query "technology events"
+                
+                # Always be helpful, concise, and provide relevant recommendations."""
+                
+                print("\nAI is thinking...", end="", flush=True)
+                
+                # Generate response with Gemini using MCP tools
+                response = await gemini_client.aio.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=chat_history,
+                    config=genai.types.GenerateContentConfig(
+                        temperature=0.7,
+                        tools=[client.session],  # Pass MCP session as tool,
+                    ),
+                )
+                
+                print("\r" + " " * 30 + "\r", end="")  # Clear the "thinking" message
+                
+                # Extract and display response
+                if response.text:
+                    print(f"AI: {response.text}\n")
+                    
+                    # Add AI response to history
+                    chat_history.append({
+                        "role": "model",
+                        "parts": [{"text": response.text}]
+                    })
+                else:
+                    print("AI: I couldn't generate a response. Please try again.\n")
+                
+            except KeyboardInterrupt:
+                print("\n\nInterrupted. Goodbye!")
+                break
+            except Exception as e:
+                print(f"\n[ERROR] {e}\n")
+                continue
+
 
 async def main():
-    """Main chatbot loop."""
-    print("👋 Welcome to the Student Recommendation Chatbot!")
-    print("I'm here to help you find forums, learning resources, wellness content, opportunities, and events!")
+    """Main entry point"""
+    print("\n" + "=" * 60)
+    print("Student Recommendation MCP Client")
+    print("=" * 60)
+    print("\nChoose mode:")
+    print("1. Demo Mode - Test all recommendation endpoints")
+    print("2. Chat Mode - Interactive AI assistant")
+    print("=" * 60)
     
-    # Category mapping
-    categories = {
-        "1": "forums",
-        "2": "learning", 
-        "3": "wellness",
-        "4": "opportunities",
-        "5": "events"
-    }
-    
-    while True:
-        try:
-            display_menu()
-            choice = input("Enter your choice (1-6): ").strip()
-            
-            if choice == "6":
-                print("\n👋 Thank you for using the Student Recommendation Chatbot!")
-                print("Have a great day and happy learning! 🎓")
-                break
-                
-            elif choice in categories:
-                category = categories[choice]
-                category_name = category.title()
-                
-                print(f"\n🎯 You selected: {category_name}")
-                user_query = input(f"What kind of {category_name.lower()} are you looking for? ").strip()
-                
-                if user_query:
-                    await process_recommendation(category, user_query)
-                else:
-                    print("❌ Please enter a valid search query.")
-                    
-                # Ask if they want to continue
-                continue_choice = input("\nWould you like to search for something else? (y/n): ").strip().lower()
-                if continue_choice not in ['y', 'yes']:
-                    print("\n👋 Thank you for using the Student Recommendation Chatbot!")
-                    print("Have a great day and happy learning! 🎓")
-                    break
-                    
-            else:
-                print("❌ Invalid choice. Please enter a number between 1-6.")
-                
-        except KeyboardInterrupt:
-            print("\n\n👋 Goodbye! Thanks for using the Student Recommendation Chatbot!")
-            break
-        except Exception as e:
-            print(f"❌ An unexpected error occurred: {e}")
-            print("Let's try again!")
+    try:
+        choice = input("\nEnter choice (1 or 2): ").strip()
+        
+        if choice == "1":
+            await demo_recommendations()
+        elif choice == "2":
+            await chat_loop()
+        else:
+            print("Invalid choice. Running demo mode...")
+            await demo_recommendations()
+    except KeyboardInterrupt:
+        print("\n\nGoodbye!")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -3,6 +3,7 @@ Student Recommendation POC - FastAPI Backen
 A prototype recommendation system that collects student info and provides 
 personalized content recommendations using TF-IDF + Cosine Similarity with 
 Groq API for keyword extraction.
+cd /Users/dikshanta/Documents/Recommendation_Poc/student_recommendation && python3 -m uvicorn app.main:app --reload --port 8000
 """
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
@@ -25,10 +26,10 @@ import numpy as np
 from groq import Groq
 
 # Import recommendation engine
-from app.routes import recommendation as rec_engine
+from .routes import recommendation as rec_engine
 
 # Import data models
-from app.models import (
+from .models import (
     StudentOnboard,
     RecommendationQuery,
     RecommendationResponse,

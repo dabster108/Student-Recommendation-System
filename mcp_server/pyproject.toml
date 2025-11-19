@@ -9,6 +9,8 @@ dependencies = [
     "fastmcp>=1.0.0",
     "google-genai>=1.50.1",
     "google-generativeai>=0.8.5",
+    "groq>=0.34.1",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.1",
+    "scikit-learn>=1.7.2",
 ]
