@@ -53,40 +53,6 @@ if not GEMINI_API_KEY:
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
-async def demo_recommendations():
-    """Demo function to test all recommendation endpoints"""
-    async with Client(MCP_SERVER_URL) as client:
-        print("=" * 60)
-        print("MCP Client - Student Recommendation System Demo")
-        print("=" * 60)
-        
-        # List available tools
-        tools = await client.list_tools()
-        print(f"\nAvailable tools: {len(tools)}")
-        for tool in tools:
-            if "recommend" in tool.name.lower():
-                print(f"  - {tool.name}")
-        
-        print("\n" + "=" * 60)
-        
-        # Test various recommendation endpoints
-        test_queries = [
-            ("recommend_forums_post", {"query": "machine learning discussions"}),
-            ("recommend_learning_post", {"query": "python programming tutorials"}),
-            ("recommend_wellness_post", {"query": "stress management tips"}),
-            ("recommend_events_post", {"query": "tech hackathons"}),
-            ("recommend_scholarships_post", {"query": "computer science scholarships"}),
-        ]
-        
-        for tool_name, params in test_queries:
-            try:
-                print(f"\nTesting: {tool_name}")
-                print(f"   Query: {params['query']}")
-                result = await client.call_tool(tool_name, params)
-                print(f"   [SUCCESS] Results: {len(result.data.get('recommendations', []))} items found")
-            except Exception as e:
-                print(f"   [ERROR] {e}")
-
 
 async def chat_loop():
     """Interactive chat loop with Gemini using MCP tools"""
@@ -183,19 +149,10 @@ async def main():
     print("1. Demo Mode - Test all recommendation endpoints")
     print("2. Chat Mode - Interactive AI assistant")
     print("=" * 60)
+  
+  #ONLY RUN CHATLOOP
+    await chat_loop()
     
-    try:
-        choice = input("\nEnter choice (1 or 2): ").strip()
-        
-        if choice == "1":
-            await demo_recommendations()
-        elif choice == "2":
-            await chat_loop()
-        else:
-            print("Invalid choice. Running demo mode...")
-            await demo_recommendations()
-    except KeyboardInterrupt:
-        print("\n\nGoodbye!")
 
 
 if __name__ == "__main__":

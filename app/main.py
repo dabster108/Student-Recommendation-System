@@ -64,9 +64,6 @@ app.add_middleware(
 )
 
 
-# ============================================
-# Exception Handlers for Validation
-# ============================================
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
