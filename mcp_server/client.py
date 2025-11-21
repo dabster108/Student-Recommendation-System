@@ -90,22 +90,8 @@ async def chat_loop():
                     "parts": [{"text": user_input}]
                 })
                 
-                # Create system instruction to guide Gemini
-                # system_instruction = """You are a helpful student recommendation assistant. 
-                # You have access to various recommendation tools for students including:
-                # - Forums, Learning materials, Wellness resources
-                # - Events, Scholarships, Opportunities
-                # - Study materials (Flashcards, Q&A, MCQs, True/False questions)
-                # - Confessions (anonymous discussions)
                 
-                # When a user asks for recommendations, use the appropriate tool to fetch relevant results.
-                # For example:
-                # - "Find me ML forums" → use recommend_forums_post with query "machine learning"
-                # - "Show python tutorials" → use recommend_learning_post with query "python tutorials"
-                # - "Any tech events?" → use recommend_events_post with query "technology events"
-                
-                # Always be helpful, concise, and provide relevant recommendations."""
-                
+            
                 print("\nAI is thinking...", end="", flush=True)
                 
                 # Generate response with Gemini using MCP tools

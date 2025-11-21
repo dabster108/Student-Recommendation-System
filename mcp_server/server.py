@@ -34,3 +34,7 @@ mcp = FastMCP.from_openapi(
     name="My API Server"
 )
 
+# Run the MCP server with stdio transport (default for MCP)
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+
