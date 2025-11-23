@@ -6,7 +6,7 @@ Smart content-based recommendation system that considers:
 2. Student interests
 3. Student courses enrolled
 4. TF-IDF + Cosine Similarity matching
-5. Semantic understanding via Groq API
+5. Semantic understanding via Gemini API
 
 All functions include comprehensive type hints and input validation.
 """
@@ -23,14 +23,18 @@ from dotenv import load_dotenv
 ENV_PATH = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
 
-# Import Groq
+# Import Gemini
 try:
-    from groq import Groq
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-    groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+    import google.generativeai as genai
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    else:
+        gemini_model = None
 except ImportError:
-    groq_client = None
-    print("Groq library not available")
+    gemini_model = None
+    print("Gemini library not available")
 
 
 def enhance_query_with_student_context(
@@ -79,7 +83,7 @@ def semantic_relevance_check(
     threshold: float = 0.30
 ) -> Tuple[bool, float]:
     """
-    Use Groq API to check if an item is semantically relevant to the query.
+    Use Gemini API to check if an item is semantically relevant to the query.
     This helps filter out false positives from TF-IDF matching.
     
     Args:
@@ -99,7 +103,7 @@ def semantic_relevance_check(
     
     if not isinstance(threshold, (int, float)) or not (0.0 <= threshold <= 1.0):
         threshold = 0.30
-    if not groq_client:
+    if not gemini_model:
         return True, 0.5
     
     try:
@@ -128,17 +132,16 @@ Content title and description: "{item_text}"
 
 Relevance score (0-100):"""
 
-        response = groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,  # Lower temperature for more consistent scoring
-            max_tokens=10
+        full_prompt = f"{system_prompt}\n\n{prompt}"
+        response = gemini_model.generate_content(
+            full_prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=10,
+            )
         )
         
-        score_text = response.choices[0].message.content.strip()
+        score_text = response.text.strip()
         import re
         numbers = re.findall(r'\d+', score_text)
         if numbers:
@@ -173,7 +176,7 @@ def get_recommendations(
         content_key: Key to use for primary content (default: "description")
         top_n: Number of results to return
         min_similarity: Minimum similarity threshold (0.0-1.0)
-        use_semantic_check: Whether to use Groq API for semantic validation
+        use_semantic_check: Whether to use Gemini API for semantic validation
     
     Returns:
         List[Dict[str, Any]]: Recommended items with similarity scores
@@ -254,8 +257,8 @@ def get_recommendations(
             # Add TF-IDF similarity score
             item_copy["tfidf_score"] = float(similarity)
             
-            # Semantic relevance check using Groq
-            if use_semantic_check and groq_client:
+            # Semantic relevance check using Gemini
+            if use_semantic_check and gemini_model:
                 item_text = item_full_texts[original_idx]
                 is_relevant, semantic_score = semantic_relevance_check(query, item_text, threshold=0.30)
                 
