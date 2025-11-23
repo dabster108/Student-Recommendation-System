@@ -2,7 +2,7 @@
 Student Recommendation POC - FastAPI Backen
 A prototype recommendation system that collects student info and provides 
 personalized content recommendations using TF-IDF + Cosine Similarity with 
-Groq API for keyword extraction.
+Gemini API for keyword extraction.
 cd /Users/dikshanta/Documents/MCP-FASTMCP/student_recommendation && python3 -m uvicorn app.main:app --reload --port 8000 
 """ 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -22,8 +22,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-# Groq API import
-from groq import Groq
+# Gemini API import
+import google.generativeai as genai
 
 # Import recommendation engine
 from .routes import recommendation as rec_engine
@@ -160,19 +160,20 @@ def load_dummy_data() -> Dict[str, List[Dict[str, Any]]]:
 
 DUMMY_DATA = load_dummy_data()
 
-# Initialize Groq client with validation
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    print("Warning: GROQ_API_KEY not found in environment variables")
-    groq_client = None
+# Initialize Gemini client with validation
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    print("Warning: GEMINI_API_KEY not found in environment variables")
+    gemini_model = None
 else:
-    print(f"✓ Groq API key loaded successfully (key starts with: {GROQ_API_KEY[:10]}...)")
+    print(f"✓ Gemini API key loaded successfully (key starts with: {GEMINI_API_KEY[:10]}...)")
     try:
-        groq_client = Groq(api_key=GROQ_API_KEY)
-        print("✓ Groq client initialized successfully")
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+        print("✓ Gemini client initialized successfully")
     except Exception as e:
-        print(f"✗ Error initializing Groq client: {e}")
-        groq_client = None
+        print(f"✗ Error initializing Gemini client: {e}")
+        gemini_model = None
 
 
 # ============================================
@@ -272,13 +273,13 @@ def resolve_student_for_request(student_id: Optional[int]) -> Optional[Dict[str,
     return None
 
 
-def extract_keywords_with_groq(query: str) -> List[str]:
+def extract_keywords_with_gemini(query: str) -> List[str]:
     """
-    Use Groq API to extract important keywords/intent from user query.
+    Use Gemini API to extract important keywords/intent from user query.
     Falls back to simple keyword extraction if API is unavailable.
     """
-    if not groq_client:
-        print("Groq API not available, using fallback keyword extraction")
+    if not gemini_model:
+        print("Gemini API not available, using fallback keyword extraction")
         return fallback_keyword_extraction(query)
     
     try:
@@ -302,30 +303,23 @@ Output: engineering, technology, coding, programming, robotics
 
 Return only comma-separated keywords for what the user WANTS."""
 
-        chat_completion = groq_client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": f"Extract keywords from: {query}"
-                }
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.3,
-            max_tokens=100
+        full_prompt = f"{system_prompt}\n\nExtract keywords from: {query}"
+        response = gemini_model.generate_content(
+            full_prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.3,
+                max_output_tokens=100,
+            )
         )
         
-        keywords_text = chat_completion.choices[0].message.content.strip()
+        keywords_text = response.text.strip()
         keywords = [kw.strip().lower() for kw in keywords_text.split(",")]
         
-        print(f"Groq extracted keywords: {keywords}")
+        print(f"Gemini extracted keywords: {keywords}")
         return keywords
         
     except Exception as e:
-        print(f"Groq API error: {e}, using fallback")
+        print(f"Gemini API error: {e}, using fallback")
         return fallback_keyword_extraction(query)
 
 
@@ -478,7 +472,7 @@ async def home() -> Union[FileResponse, HealthCheckResponse]:
         message="Student Recommendation API",
         version="1.0.0",
         status="running",
-        groq_enabled=groq_client is not None,
+        gemini_enabled=gemini_model is not None,
         data_loaded=bool(DUMMY_DATA)
     )
 
@@ -489,7 +483,7 @@ async def api_info() -> HealthCheckResponse:
         message="Student Recommendation API",
         version="1.0.0",
         status="running",
-        groq_enabled=groq_client is not None,
+        gemini_enabled=gemini_model is not None,
         data_loaded=bool(DUMMY_DATA)
     )
 
@@ -602,7 +596,7 @@ async def recommend_forums_get(query: str, student_id: Optional[int] = None) -> 
         RecommendationResponse: Personalized forum recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     forums_data = DUMMY_DATA.get("forums", [])
     recommendations = rec_engine.recommend_forums(
@@ -635,7 +629,7 @@ async def recommend_forums_post(query: str, student_id: Optional[int] = None) ->
         RecommendationResponse: Personalized forum recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     forums_data = DUMMY_DATA.get("forums", [])
     recommendations = rec_engine.recommend_forums(
@@ -668,7 +662,7 @@ async def recommend_learning_post(query: str, student_id: Optional[int] = None) 
         RecommendationResponse: Personalized learning recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     recommendations = rec_engine.recommend_learning_content(
         query=query,
@@ -703,7 +697,7 @@ async def recommend_learning_get(query: str, student_id: Optional[int] = None) -
         RecommendationResponse: Personalized learning recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     recommendations = rec_engine.recommend_learning_content(
         query=query,
@@ -738,7 +732,7 @@ async def recommend_wellness_post(query: str, student_id: Optional[int] = None) 
         RecommendationResponse: Wellness content recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     recommendations = rec_engine.recommend_wellness(
         query=query,
@@ -772,7 +766,7 @@ async def recommend_opportunities_post(query: str, student_id: Optional[int] = N
         RecommendationResponse: Opportunities recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     opportunities_data = DUMMY_DATA.get("opportunities", [])
     recommendations = rec_engine.recommend_opportunities(
@@ -805,7 +799,7 @@ async def recommend_events_post(query: str, student_id: Optional[int] = None) ->
         RecommendationResponse: Events recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     events_data = DUMMY_DATA.get("events", [])
     recommendations = rec_engine.recommend_events(
@@ -838,7 +832,7 @@ async def recommend_scholarships_post(query: str, student_id: Optional[int] = No
         RecommendationResponse: Scholarships recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     scholarships_data = DUMMY_DATA.get("scholarships", [])
     recommendations = rec_engine.recommend_scholarships(
@@ -871,7 +865,7 @@ async def recommend_confessions_post(query: str, student_id: Optional[int] = Non
         RecommendationResponse: Confessions recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     confessions_data = DUMMY_DATA.get("confessions", [])
     recommendations = rec_engine.recommend_confessions(
@@ -904,7 +898,7 @@ async def recommend_flashcards_post(query: str, student_id: Optional[int] = None
         RecommendationResponse: Flashcards recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     flashcards_data = DUMMY_DATA.get("flashcards", [])
     recommendations = rec_engine.recommend_flashcards(
@@ -937,7 +931,7 @@ async def recommend_qna_post(query: str, student_id: Optional[int] = None) -> Re
         RecommendationResponse: Q&A recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     qna_data = DUMMY_DATA.get("qna", [])
     recommendations = rec_engine.recommend_qna(
@@ -970,7 +964,7 @@ async def recommend_truefalse_post(query: str, student_id: Optional[int] = None)
         RecommendationResponse: True/False recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     truefalse_data = DUMMY_DATA.get("true_false", [])
     recommendations = rec_engine.recommend_truefalse(
@@ -1003,7 +997,7 @@ async def recommend_mcq_post(query: str, student_id: Optional[int] = None) -> Re
         RecommendationResponse: MCQ recommendations
     """
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     mcq_data = DUMMY_DATA.get("mcq", [])
     recommendations = rec_engine.recommend_mcq(
@@ -1110,7 +1104,7 @@ async def get_mcq() -> List[Dict[str, Any]]:
 async def recommend_wellness_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend wellness content for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     recommendations = rec_engine.recommend_wellness(
         query=query,
@@ -1135,7 +1129,7 @@ async def recommend_wellness_get(query: str, student_id: Optional[int] = None) -
 async def recommend_opportunities_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend opportunities for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     opportunities_data = DUMMY_DATA.get("opportunities", [])
     recommendations = rec_engine.recommend_opportunities(
@@ -1159,7 +1153,7 @@ async def recommend_opportunities_get(query: str, student_id: Optional[int] = No
 async def recommend_events_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend events for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     events_data = DUMMY_DATA.get("events", [])
     recommendations = rec_engine.recommend_events(
@@ -1183,7 +1177,7 @@ async def recommend_events_get(query: str, student_id: Optional[int] = None) -> 
 async def recommend_scholarships_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend scholarships for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     scholarships_data = DUMMY_DATA.get("scholarships", [])
     recommendations = rec_engine.recommend_scholarships(
@@ -1207,7 +1201,7 @@ async def recommend_scholarships_get(query: str, student_id: Optional[int] = Non
 async def recommend_confessions_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend confessions for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     confessions_data = DUMMY_DATA.get("confessions", [])
     recommendations = rec_engine.recommend_confessions(
@@ -1231,7 +1225,7 @@ async def recommend_confessions_get(query: str, student_id: Optional[int] = None
 async def recommend_flashcards_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend flashcards for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     flashcards_data = DUMMY_DATA.get("flashcards", [])
     recommendations = rec_engine.recommend_flashcards(
@@ -1255,7 +1249,7 @@ async def recommend_flashcards_get(query: str, student_id: Optional[int] = None)
 async def recommend_qna_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend Q&A for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     qna_data = DUMMY_DATA.get("qna", [])
     recommendations = rec_engine.recommend_qna(
@@ -1279,7 +1273,7 @@ async def recommend_qna_get(query: str, student_id: Optional[int] = None) -> Rec
 async def recommend_truefalse_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend True/False questions for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     truefalse_data = DUMMY_DATA.get("true_false", [])
     recommendations = rec_engine.recommend_truefalse(
@@ -1303,7 +1297,7 @@ async def recommend_truefalse_get(query: str, student_id: Optional[int] = None) 
 async def recommend_mcq_get(query: str, student_id: Optional[int] = None) -> RecommendationResponse:
     """Recommend MCQ sets for a student."""
     student_data = resolve_student_for_request(student_id)
-    keywords = extract_keywords_with_groq(query)
+    keywords = extract_keywords_with_gemini(query)
     
     mcq_data = DUMMY_DATA.get("mcq", [])
     recommendations = rec_engine.recommend_mcq(

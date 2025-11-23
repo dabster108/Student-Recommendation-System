@@ -387,7 +387,7 @@ class HealthCheckResponse(BaseModel):
     message: str
     version: str
     status: Literal["running", "degraded", "error"]
-    groq_enabled: bool
+    gemini_enabled: bool
     data_loaded: bool = True
     
     class Config:
@@ -396,7 +396,7 @@ class HealthCheckResponse(BaseModel):
                 "message": "Student Recommendation API",
                 "version": "1.0.0",
                 "status": "running",
-                "groq_enabled": True,
+                "gemini_enabled": True,
                 "data_loaded": True
             }
         }
