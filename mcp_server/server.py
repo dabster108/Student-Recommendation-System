@@ -4,7 +4,8 @@ from fastmcp import FastMCP
 # Create an HTTP client for your API
 client = httpx.AsyncClient(base_url="http://127.0.0.1:8000")
 
-# Load your OpenAPI spec 
+#fastapi open ai spec
+
 openapi_spec = httpx.get("http://127.0.0.1:8000/openapi.json").json()
 
 # Filter out GET recommendation endpoints - keep only POST
