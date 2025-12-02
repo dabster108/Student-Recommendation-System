@@ -1,5 +1,8 @@
 import httpx
 from fastmcp import FastMCP
+from fastapi import FastAPI
+from dotenv import load_dotenv
+import os
 
 # Create an HTTP client for your API
 client = httpx.AsyncClient(base_url="http://127.0.0.1:8000")
