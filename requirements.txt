@@ -1,19 +1,24 @@
 
 # Core FastAPI dependencies
-fastapi>=0.104.1
+fastapi[standard]>=0.121.2
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.2
-python-dotenv>=1.0.0
+python-dotenv>=1.2.1
 
 # Machine Learning
-scikit-learn>=1.4.0
+scikit-learn>=1.7.2
 numpy>=1.24.0
 
 # AI/LLM Integration
-google-generativeai>=0.8.0
+google-generativeai>=0.8.5
+google-genai>=1.50.1
+groq>=0.34.1
 
 # HTTP Client
-httpx>=0.25.0
+httpx>=0.28.1
+
+# MCP Server Dependencies
+fastmcp>=1.0.0
 
 # Optional: Data validation enhancement
 email-validator>=2.0.0
